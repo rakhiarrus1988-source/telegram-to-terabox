@@ -2,11 +2,9 @@ import asyncio
 import aiohttp
 import os
 from pyrogram import Client
-from pyrogram.raw.functions.messages import GetFile
-from pyrogram.raw.types import InputDocumentFileLocation, InputFileLocation
 
 async def get_file_url_and_size(client: Client, file_id: str):
-    """Get direct Telegram CDN URL and file size from file_id."""
+    """Direct Telegram CDN URL aur file size laayega"""
     file = await client.get_file(file_id)
     dc_id = file.dc_id
     file_path = file.file_path
@@ -22,13 +20,13 @@ async def download_chunk(session, url, start, end, chunk_dir, part_num):
             with open(part_path, 'wb') as f:
                 f.write(data)
         else:
-            raise Exception(f"Failed to download chunk {part_num}")
+            raise Exception(f"Chunk {part_num} download fail")
 
 async def download_telegram_file(client: Client, file_id: str, output_path: str, workers: int = 8):
-    """Download file using parallel range requests."""
+    """Parallel chunks mein download karega - full bandwidth use"""
     url, file_size = await get_file_url_and_size(client, file_id)
     if file_size == 0:
-        raise ValueError("File size is zero.")
+        raise ValueError("File size zero hai!")
     
     chunk_size = file_size // workers
     os.makedirs('temp_chunks', exist_ok=True)
@@ -40,7 +38,7 @@ async def download_telegram_file(client: Client, file_id: str, output_path: str,
             tasks.append(download_chunk(session, url, start, end, 'temp_chunks', i))
         await asyncio.gather(*tasks)
     
-    # Combine parts
+    # Sab parts ko jodna
     with open(output_path, 'wb') as out:
         for i in range(workers):
             part_path = os.path.join('temp_chunks', f'part_{i}')
