@@ -7,8 +7,8 @@ from uploader import upload_to_terabox
 
 async def search_file_in_saved_messages(client, filename):
     print("🔍 Saved Messages mein search ho raha hai...")
-    # ✅ Sahi tareeqa: iter_history use karo
-    async for msg in client.iter_history('me', limit=2000):
+    # ✅ Pyrogram v2 ka sahī tarīqā – get_chat_history
+    async for msg in client.get_chat_history('me', limit=2000):
         if msg.document and msg.document.file_name and filename.lower() in msg.document.file_name.lower():
             return msg.document.file_id, msg.document.file_name, msg.document.file_size
         elif msg.video and msg.video.file_name and filename.lower() in msg.video.file_name.lower():
