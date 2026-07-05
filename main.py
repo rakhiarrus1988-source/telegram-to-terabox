@@ -7,10 +7,10 @@ from downloader import download_telegram_file
 from uploader import upload_to_terabox
 
 async def search_file_in_saved_messages(client, filename):
-    """Search Saved Messages for a file with matching name."""
-    saved_messages = await client.get_messages('me', limit=1000)  # adjust limit as needed
+    """Saved Messages (me) mein file name search karega"""
+    print("🔍 Saved Messages mein search ho raha hai...")
+    saved_messages = await client.get_messages('me', limit=2000)  # limit badha sakte ho
     for msg in saved_messages:
-        # Check document, video, audio, etc.
         if msg.document and msg.document.file_name and filename.lower() in msg.document.file_name.lower():
             return msg.document.file_id, msg.document.file_name, msg.document.file_size
         elif msg.video and msg.video.file_name and filename.lower() in msg.video.file_name.lower():
@@ -20,11 +20,13 @@ async def search_file_in_saved_messages(client, filename):
     return None, None, None
 
 async def main():
-    # Mount Drive and load credentials
+    # 1️⃣ Drive Mount (Colab apne aap link dega)
     mount_drive()
+    
+    # 2️⃣ Credentials Load (Pehli baar maangega, fir save karega)
     creds = get_credentials()
     
-    # Create client with session file in Drive
+    # 3️⃣ Pyrogram Client (Session Drive mein save hogi)
     session_path = get_session_path()
     client = Client(
         session_path,
@@ -33,52 +35,53 @@ async def main():
         phone_number=creds['phone']
     )
     
-    # Start client (will prompt for OTP if needed)
+    # 4️⃣ Login (Pehli baar OTP maangega, baad mein auto-login)
     try:
         await client.start()
-        print("✅ Logged in to Telegram successfully!")
+        print("✅ Telegram Login Successful!")
     except Exception as e:
-        print(f"❌ Login failed: {e}")
+        print(f"❌ Login Failed: {e}")
         return
     
-    # Ask for file name to search
-    filename = input("\nEnter the file name (or part of it) to download from Saved Messages: ").strip()
+    # 5️⃣ User se file name lo
+    filename = input("\n📁 Saved Messages mein jis file ko download karna hai uska naam (ya part) likho: ").strip()
     if not filename:
-        print("No file name provided. Exiting.")
+        print("❌ Kuch likha hi nahi! Exiting.")
         return
     
-    # Search in Saved Messages
+    # 6️⃣ Search karo
     file_id, name, size = await search_file_in_saved_messages(client, filename)
     if file_id is None:
-        print(f"❌ No file found with name containing '{filename}' in Saved Messages.")
+        print(f"❌ '{filename}' naam ki koi file Saved Messages mein nahi mili.")
         return
-    print(f"✅ Found file: {name} (Size: {size} bytes)")
+    print(f"✅ Mil gayi! File: {name} | Size: {size} bytes")
     
-    # Download using multi-worker
+    # 7️⃣ High-speed download (8 workers)
     output_path = f"/content/{name}"
-    print("⏳ Downloading with full bandwidth (8 workers)...")
+    print("⏳ Download chal raha hai (Full Bandwidth, 8 workers)...")
     try:
         await download_telegram_file(client, file_id, output_path, workers=8)
-        print(f"✅ Downloaded to {output_path}")
+        print(f"✅ Download complete: {output_path}")
     except Exception as e:
         print(f"❌ Download error: {e}")
         return
     
-    # Upload to Terabox
-    print("⏳ Uploading to Terabox using NDUS cookies...")
-    ndus_cookies = creds['ndus_cookies']
+    # 8️⃣ Terabox par upload (sirf token use hoga)
+    print("⏳ Terabox par upload ho raha hai...")
+    ndus_token = creds['ndus_token']
     try:
-        download_link = upload_to_terabox(output_path, ndus_cookies)
-        print(f"✅ Upload successful! 🔗 {download_link}")
+        link = upload_to_terabox(output_path, ndus_token)
+        print(f"✅ Upload Complete! 🔗 Download Link: {link}")
     except Exception as e:
         print(f"❌ Upload error: {e}")
     finally:
-        # Cleanup
+        # 9️⃣ Local file delete (Jagah bachao)
         if os.path.exists(output_path):
             os.remove(output_path)
-            print("🧹 Cleaned up local file.")
+            print("🧹 Local file delete kar di.")
     
     await client.stop()
+    print("✅ Sab khatam! Bot band ho gaya.")
 
 if __name__ == "__main__":
     asyncio.run(main())
