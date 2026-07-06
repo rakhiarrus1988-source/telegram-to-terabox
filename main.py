@@ -1,8 +1,7 @@
 import asyncio
 import os
-import time
+import shutil
 from pyrogram import Client
-from pyrogram.errors import RPCError
 from config import get_credentials, mount_drive, get_session_path
 from downloader import download_telegram_file
 from uploader import upload_to_terabox
@@ -12,7 +11,7 @@ async def search_file_in_saved_messages(client, filename):
     print("📋 Saare file names neeche print ho rahe hain (check karo):")
     print("-" * 60)
     
-    file_list = []  # Store all files with their details
+    file_list = []
     async for msg in client.get_chat_history('me', limit=5000):
         if msg.document and msg.document.file_name:
             fname = msg.document.file_name
@@ -43,7 +42,7 @@ async def search_file_in_saved_messages(client, filename):
         if search_term in fname.lower():
             return fid, fname, fsize
     
-    # 3. Partial match with extension removed (if user gave with extension)
+    # 3. Partial match with extension removed
     if '.' in search_term:
         base = search_term.split('.')[0]
         for fid, fname, fsize, ftype in file_list:
@@ -57,7 +56,6 @@ async def main():
     creds = get_credentials()
     
     session_path = get_session_path()
-    # Agar pehle session corrupt ho toh delete karo
     if os.path.exists(session_path + ".lock"):
         print("⚠️ Purana session lock mila, delete kar raha hoon...")
         os.remove(session_path + ".lock")
@@ -74,7 +72,6 @@ async def main():
         print("✅ Telegram Login Successful!")
     except Exception as e:
         print(f"❌ Login Failed: {e}")
-        # Agar database locked, toh session file delete karke retry
         if "database is locked" in str(e):
             print("🔄 Database locked, session file delete kar raha hoon...")
             if os.path.exists(session_path + ".session"):
@@ -94,33 +91,41 @@ async def main():
         print("💡 Upar list mein dekho – agar file naam wahan nahi hai toh:")
         print("   - File Saved Messages mein nahi hai")
         print("   - Ya aapne galat spelling/part daali hai")
-        print("   - Ya file kisi aur chat mein hai (forward kari ho)")
         await client.stop()
         return
     
     print(f"✅ Mil gayi! {name} | Size: {size} bytes")
     
-    output_path = f"/content/{name}"
+    # 📁 Colab mein download location
+    colab_path = f"/content/{name}"
+    
     print("⏳ Downloading with 8 workers (Full Bandwidth)...")
     try:
-        await download_telegram_file(client, file_id, output_path, workers=8)
+        await download_telegram_file(client, file_id, colab_path, workers=8)
         print("✅ Download complete!")
     except Exception as e:
         print(f"❌ Download error: {e}")
         await client.stop()
         return
     
+    # 💾 Google Drive mein save karo
+    drive_path = f"/content/drive/MyDrive/{name}"
+    print(f"💾 Moving file to Google Drive: {drive_path}")
+    try:
+        shutil.move(colab_path, drive_path)
+        print(f"✅ File saved in Drive: {drive_path}")
+    except Exception as e:
+        print(f"⚠️ Move to Drive failed: {e}")
+        print("📁 File is still in Colab at: " + colab_path)
+        drive_path = colab_path  # Fallback: use Colab path
+    
+    # ☁️ Terabox par upload (Drive ya Colab path se)
     print("⏳ Uploading to Terabox...")
     try:
-        link = upload_to_terabox(output_path, creds['ndus_token'])
+        link = upload_to_terabox(drive_path, creds['ndus_token'])
         print(f"✅ Upload Done! 🔗 {link}")
     except Exception as e:
         print(f"❌ Upload error: {e}")
-    
-    # Cleanup
-    if os.path.exists(output_path):
-        os.remove(output_path)
-        print("🧹 Local file delete kar di.")
     
     await client.stop()
     print("✅ Sab khatam! Client safely stopped.")
