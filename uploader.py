@@ -25,7 +25,7 @@ def get_block_list(file_path):
 def upload_block_worker(ndus_token, upload_url, file_path, block_index):
     """Single block ko thread ke zariye speedy upload karne ka worker"""
     headers = {
-        "Cookie": f"ndus={ndus_token}",
+        "Cookie": f"ndus={ndus_token}",  # ✅ Token ko cookie format mein bhejo
         "User-Agent": "Mozilla/5.0"
     }
     with open(file_path, "rb") as f:
@@ -33,12 +33,15 @@ def upload_block_worker(ndus_token, upload_url, file_path, block_index):
         chunk = f.read(BLOCK_SIZE)
 
     files = {"file": chunk}
-    response = requests.post(upload_url, headers=headers, files=files)
-    return response.status_code == 200
+    try:
+        response = requests.post(upload_url, headers=headers, files=files, timeout=30)
+        return response.status_code in [200, 206]
+    except:
+        return False
 
 def upload_to_terabox(file_path, ndus_token, remote_dir="/"):
     """
-    Main function jo main.py se call karega - Speedy upload with parallel blocks
+    NDUS token ke saath Terabox par speedy upload karega
     """
     # File ki original extension check karega
     _, file_extension = os.path.splitext(file_path)
@@ -53,17 +56,16 @@ def upload_to_terabox(file_path, ndus_token, remote_dir="/"):
     print(f"🔄 Saving on Cloud as: {target_file_name}")
     print("⏳ File hashes processing...")
 
-    file_md5 = get_file_md5(file_path)
     block_list = get_block_list(file_path)
 
     headers = {
-        "Cookie": f"ndus={ndus_token}",
+        "Cookie": f"ndus={ndus_token}",  # ✅ Token ko cookie format mein bhejo
         "User-Agent": "Mozilla/5.0"
     }
 
     # STEP 1: Pre-create Request
     print("🔄 Initializing pre-create...")
-    precreate_url = "https://1024terabox.com/api/precreate"
+    precreate_url = "https://www.terabox.com/api/precreate"
     data = {
         "path": os.path.join(remote_dir, target_file_name),
         "size": str(file_size),
@@ -72,7 +74,10 @@ def upload_to_terabox(file_path, ndus_token, remote_dir="/"):
         "method": "precreate"
     }
 
-    res = requests.post(precreate_url, headers=headers, data=data).json()
+    try:
+        res = requests.post(precreate_url, headers=headers, data=data).json()
+    except Exception as e:
+        raise Exception(f"Pre-create request failed: {e}")
 
     if res.get("errno") != 0:
         raise Exception(f"Pre-create failed: {res}")
@@ -80,7 +85,7 @@ def upload_to_terabox(file_path, ndus_token, remote_dir="/"):
     # Agar file cloud par pehle se maujood hai (Instant Rapid Upload)
     if res.get("return_type") == 2:
         print("⚡ Instant Upload Success! Data save ho gaya bina upload kiye.")
-        return f"https://1024terabox.com{remote_dir}"
+        return f"https://www.terabox.com{remote_dir}/{target_file_name}"
 
     uploadid = res["uploadid"]
     block_urls = res["block_list"]
@@ -91,7 +96,7 @@ def upload_to_terabox(file_path, ndus_token, remote_dir="/"):
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = []
         for index, block_id in enumerate(block_urls):
-            upload_url = f"https://baidu.com{uploadid}&partseq={index}"
+            upload_url = f"https://www.terabox.com{uploadid}&partseq={index}"
             futures.append(executor.submit(upload_block_worker, ndus_token, upload_url, file_path, index))
 
         results = [f.result() for f in futures]
@@ -101,7 +106,7 @@ def upload_to_terabox(file_path, ndus_token, remote_dir="/"):
 
     # STEP 3: Create File Finalize
     print("🏁 Upload done. Finalizing file chunks...")
-    create_url = "https://1024terabox.com/api/create"
+    create_url = "https://www.terabox.com/api/create"
     create_data = {
         "path": os.path.join(remote_dir, target_file_name),
         "size": str(file_size),
@@ -115,6 +120,6 @@ def upload_to_terabox(file_path, ndus_token, remote_dir="/"):
 
     if final_res.get("errno") == 0:
         print(f"🎉 File successfully uploaded as '{target_file_name}'!")
-        return f"https://1024terabox.com{remote_dir}/{target_file_name}"
+        return f"https://www.terabox.com{remote_dir}/{target_file_name}"
     else:
         raise Exception(f"Final file creation failed: {final_res}")
